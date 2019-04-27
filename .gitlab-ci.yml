@@ -137,9 +137,9 @@ stop:
 
 sonar:
   stage: qa
-  image: nexus.tntformacion.com:8083/devops/sonar-scanner:3.0.3.778-linux
+  image: ${DR_URL}/devops/sonar-scanner:3.2.0.1227
   variables:
-    SONAR_URL: http://sonarqube.tntformacion.com
+    SONAR_URL: ${SONAR_URL}
     SONAR_PROJECT_KEY: $CI_PROJECT_NAME
     SONAR_PROJECT_NAME: $CI_PROJECT_NAME 
     SONAR_USER: ${SONAR_USER}
