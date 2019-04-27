@@ -1,0 +1,213 @@
+stages:
+  - login
+  - build-test
+  - publish-doc
+  - deploy
+  - run
+  - qa
+  - clean
+  - stop
+
+login:
+  stage: login
+  script:
+    - docker login -u $DR_USER -p $DR_PASS $DR_URL
+  only:
+    - develop
+    - master
+    - /^release.*$/
+  tags:
+    - shell
+
+build-test:
+  stage: build-test
+  image: amio/node-chrome
+  script:
+    - npm install
+    - npm run test -- --watch=false --single-run=true --code-coverage
+    #- npm run e2e 
+    - npm run doc -- --disableCoverage
+    - npm run build -- --prod --build-optimizer
+  artifacts:
+    paths:
+      - coverage/
+      - dist/
+      - documentation/
+  only:
+    - develop
+    - master
+    - /^release.*$/
+  tags:
+    - docker
+
+publish-doc:
+  stage: publish-doc
+  script:
+    - mkdir doc
+    - mv documentation doc/
+    - mv coverage doc/
+  dependencies:
+    - build-test
+  artifacts:
+    paths:
+      - doc/
+  only:
+    - develop
+    - /^release.*$/
+  tags:
+    - shell
+
+deploy:
+   stage: deploy
+   script:
+     - "PACKAGE_VERSION=$(cat package.json | grep version | head -1 | awk -F: '{ print $2 }' | sed 's/[\",]//g' | tr -d '[[:space:]]')"
+     - ./scripts/deploy-nexus.sh $PACKAGE_VERSION $NPM_USER $NPM_PASS $NPM_URL $DR_USER $DR_PASS $DR_URL $CI_PROJECT_PATH $CI_PROJECT_PATH_SLUG 
+   dependencies:
+     - publish-doc
+     - build-test
+   only:
+    - develop
+    - master
+    - /^release.*$/
+   tags:
+     - shell
+
+run:
+  image: alpine:3.7
+  stage: run
+  environment:
+    name: ${CI_COMMIT_REF_SLUG}
+    url: http://${CI_COMMIT_REF_SLUG}-${CI_PROJECT_PATH_SLUG}.tntformacion.com
+  only:
+    - /^release.*$/
+    - master
+    - develop
+  script:
+    - PHASE="prod"
+    - if [[ ${CI_COMMIT_REF_NAME} == 'master' ]]; then PHASE="prod"; fi
+    - if [[ ${CI_COMMIT_REF_NAME} == 'develop' ]]; then PHASE="int"; fi
+    - if [[ ${CI_COMMIT_REF_NAME} == release?* ]]; then PHASE="pre"; fi
+    - echo ${PHASE}
+    - "PACKAGE_VERSION=$(cat package.json | grep version | head -1 | awk -F: '{ print $2 }' | sed 's/[\",]//g' | tr -d '[[:space:]]')"
+    - APP_VERSION="${PACKAGE_VERSION}"
+    - apk update  && apk add --no-cache curl grep
+    - curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
+    - chmod +x ./kubectl && mv ./kubectl /usr/local/bin/kubectl
+    - mkdir -p ${HOME}/.kube
+    - cat ${KUBECONFIG} > $HOME/.kube/config
+    - kubectl version
+    - cd manifests/
+    - sed -i "s/__CI_COMMIT_REF_SLUG__/${CI_COMMIT_REF_SLUG}/" deployment.yaml ingress.yaml service.yaml
+    - sed -i "s/__CI_PROJECT_PATH_SLUG__/${CI_PROJECT_PATH_SLUG}/" deployment.yaml ingress.yaml service.yaml
+    - sed -i "s/__VERSION__/${APP_VERSION}/" deployment.yaml ingress.yaml service.yaml
+    - sed -i "s/__PHASE__/${PHASE}/" deployment.yaml
+    - cat deployment.yaml
+    - cat service.yaml
+    - cat ingress.yaml
+    - kubectl apply -f deployment.yaml
+    - kubectl apply -f service.yaml
+    - kubectl apply -f ingress.yaml
+    - kubectl rollout status -f deployment.yaml
+    - kubectl get all,ing -l app=${CI_COMMIT_REF_SLUG} --namespace=${CI_PROJECT_PATH_SLUG}
+  tags:
+    - docker
+
+stop:
+  image: alpine:3.7
+  stage: stop
+  environment:
+    name: ${CI_COMMIT_REF_SLUG}
+    action: stop
+  only:
+    - /^release.*$/
+    - master
+    - develop
+  when: manual
+  script:
+    - apk update  && apk add --no-cache curl grep
+    - curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
+    - chmod +x ./kubectl && mv ./kubectl /usr/local/bin/kubectl
+    - mkdir -p ${HOME}/.kube
+    - cp k8s-config ${HOME}/.kube/config
+    - kubectl version
+    - kubectl delete ing -l app=${CI_COMMIT_REF_SLUG} --namespace=${CI_PROJECT_PATH_SLUG}
+    - kubectl delete all -l app=${CI_COMMIT_REF_SLUG} --namespace=${CI_PROJECT_PATH_SLUG}
+  tags:
+    - docker
+
+sonar:
+  stage: qa
+  image: nexus.tntformacion.com:8083/devops/sonar-scanner:3.0.3.778-linux
+  variables:
+    SONAR_URL: http://sonarqube.tntformacion.com
+    SONAR_PROJECT_KEY: $CI_PROJECT_NAME
+    SONAR_PROJECT_NAME: $CI_PROJECT_NAME 
+    SONAR_USER: ${SONAR_USER}
+    SONAR_PASS: ${SONAR_PASSWORD}
+  script:
+    - "PACKAGE_VERSION=$(cat package.json | grep version | head -1 | awk -F: '{ print $2 }' | sed 's/[\",]//g' | tr -d '[[:space:]]')"
+    - /usr/bin/sonar-scanner-run.sh -Dsonar.projectVersion=$PACKAGE_VERSION
+  only:
+    - develop
+    - master
+    - /^release.*$/
+  tags:
+    - docker
+
+clean:
+  stage: clean
+  script:
+    - docker image prune -fa
+  only:
+    - develop
+    - master
+    - /^release.*$/
+  tags:
+    - shell
+
+# run-master:
+#   stage: run
+#   script:
+#     - "PACKAGE_VERSION=$(cat package.json | grep version | head -1 | awk -F: '{ print $2 }' | sed 's/[\",]//g' | tr -d '[[:space:]]')"
+#     - echo APP_VERSION=${PACKAGE_VERSION} > .env 
+#     - docker-compose -p master -f docker/master.yml down --rmi 'all'
+#     - docker-compose -p master -f docker/master.yml up -d
+#   only:
+#     - master
+#   tags:
+#     - shell
+#   environment:
+#     name: produccion
+#     url: http://local.gitlab.com:8989
+
+# run-develop:
+#   stage: run
+#   script:
+#     - "PACKAGE_VERSION=$(cat package.json | grep version | head -1 | awk -F: '{ print $2 }' | sed 's/[\",]//g' | tr -d '[[:space:]]')"
+#     - echo APP_VERSION=${PACKAGE_VERSION} > .env 
+#     - docker-compose -p develop -f docker/develop.yml down --rmi 'all'
+#     - docker-compose -p develop -f docker/develop.yml up -d
+#   only:
+#     - develop
+#   tags:
+#     - shell
+#   environment:
+#     name: integration
+#     url: http://local.gitlab.com:8993
+
+# run-releases:
+#   stage: run
+#   script:
+#     - "PACKAGE_VERSION=$(cat package.json | grep version | head -1 | awk -F: '{ print $2 }' | sed 's/[\",]//g' | tr -d '[[:space:]]')"
+#     - echo APP_VERSION=${PACKAGE_VERSION} > .env 
+#     - docker-compose -p releases -f docker/releases.yml down --rmi 'all'
+#     - docker-compose -p releases -f docker/releases.yml up -d
+#   only:
+#     - /^release.*$/
+#   tags:
+#     - shell
+#   environment:
+#     name: pre-produccion
+#     url: http://local.gitlab.com:8994
+
+

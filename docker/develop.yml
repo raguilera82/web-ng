@@ -1,0 +1,15 @@
+version: '3'
+
+services:
+  
+  devops-web-develop:
+    image: nexus-local.tntformacion.com:10000/devops/web-ng:${APP_VERSION}
+    environment:
+      - "PHASE=int"
+    ports:
+    - "8993:80"
+    networks:
+    - devops-web-develop
+
+networks:
+  devops-web-develop:

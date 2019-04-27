@@ -1,0 +1,15 @@
+version: '3'
+
+services:
+  
+  devops-web-releases:
+    image: nexus-local.tntformacion.com:10000/devops/web-ng:${APP_VERSION}
+    environment:
+      - "PHASE=pre"
+    ports:
+    - "8994:80"
+    networks:
+    - devops-web-releases
+
+networks:
+  devops-web-releases:

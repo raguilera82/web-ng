@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: __CI_COMMIT_REF_SLUG__
+  namespace: __CI_PROJECT_PATH_SLUG__
+  labels:
+    app: __CI_COMMIT_REF_SLUG__
+    track: stable
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: __CI_COMMIT_REF_SLUG__
+  template:
+    metadata:
+      labels:
+        app: __CI_COMMIT_REF_SLUG__
+        track: stable
+    spec:
+      imagePullSecrets:
+        - name: nexus-docker
+      containers:
+      - name: app
+        image: nexus-local.tntformacion.com:10000/devops/web-ng:__VERSION__
+        env:
+          - name: PHASE
+            value: __PHASE__
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 80
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 3
+          timeoutSeconds: 2
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 3
+          timeoutSeconds: 2

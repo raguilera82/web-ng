@@ -1,0 +1,15 @@
+version: '3'
+
+services:
+  
+  devops-web-master:
+    image: nexus-local.tntformacion.com:10000/devops/web-ng:${APP_VERSION}
+    environment:
+      - "PHASE=prod"
+    ports:
+    - "8989:80"
+    networks:
+    - devops-web-master
+
+networks:
+  devops-web-master:
