@@ -94,7 +94,7 @@ run:
     - curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
     - chmod +x ./kubectl && mv ./kubectl /usr/local/bin/kubectl
     - mkdir -p ${HOME}/.kube
-    - cat ${KUBECONFIG} > $HOME/.kube/config
+    - cp k8s-config ${HOME}/.kube/config
     - kubectl version
     - cd manifests/
     - sed -i "s/__CI_COMMIT_REF_SLUG__/${CI_COMMIT_REF_SLUG}/" deployment.yaml ingress.yaml service.yaml
