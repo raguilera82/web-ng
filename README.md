@@ -1,5 +1,29 @@
 # DevopsWeb
 
+## Create namespace
+
+```
+$> kubectl create namespace devops-web-ng
+```
+
+## Set Docker Registry
+
+```
+$> kubectl create \
+    secret docker-registry nexus-docker \
+    --docker-server=nexus-local.tntformacion.com:10000 \
+    --docker-username=admin \
+    --docker-password=YOUR_PASSWORD \
+    --docker-email=admin@example.org --namespace=devops-web-ng
+```
+
+# Set secure tls
+
+```
+$> kubectl create secret tls secure-tls --key privkey1.pem --cert fullchain1.pem -n devops-web-ng
+``
+
+
 This project was generated with [Angular CLI](https://github.com/angular/angular-cli) version 1.4.8.
 
 ## Development server
