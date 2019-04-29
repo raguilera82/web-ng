@@ -17,6 +17,16 @@ $> kubectl create \
     --docker-email=admin@example.org --namespace=devops-web-ng
 ```
 
+# Raise backend
+
+First database
+
+$> docker-compose -f compose/test.yml up --build -d devops-db-test
+
+After app:
+
+$> docker-compose -f compose/test.yml up --build -d devops-app-test
+
 # Set secure tls
 
 ```
